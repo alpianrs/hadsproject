@@ -1,0 +1,6 @@
+{
+  "name": "HadsProject Photography & Videography",
+  "description": "Sistem booking & portofolio photography & videography HadsProject dengan tema luxury burgundy, landing page, kalender ketersediaan, WhatsApp chat, konfirmasi pembayaran DP, invoice PDF, Google Drive storage, dan dashboard admin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: #1A0309;
+    color: #F8F5F6;
+  }
+  h1, h2, h3, .font-serif {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+}
+
+.text-gold {
+  color: #D4AF37;
+}
+
+.bg-gold {
+  background-color: #D4AF37;
+}
+
+.border-gold {
+  border-color: #D4AF37;
+}
+
+.bg-burgundy-dark {
+  background-color: #1A0309;
+}
+
+.bg-burgundy-card {
+  background-color: #2A0610;
+}
+
+.bg-burgundy-light {
+  background-color: #3B0918;
+}
+
+.border-burgundy {
+  border-color: rgba(212, 175, 55, 0.2);
+}
+
+.gold-glow {
+  box-shadow: 0 0 25px rgba(212, 175, 55, 0.2);
+}
+

@@ -1,0 +1,154 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profiles for customers and admins",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "packages": {
+      "title": "Packages",
+      "description": "Photography service packages offered by HadsProject",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "minDp": { "type": "number" },
+        "duration": { "type": "string" },
+        "photoCount": { "type": "string" },
+        "videoCount": { "type": "string" },
+        "drone": { "type": "boolean" },
+        "album": { "type": "string" },
+        "cetak": { "type": "string" },
+        "bonus": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "active": { "type": "boolean" },
+        "category": { "type": "string" }
+      }
+    },
+    "bookings": {
+      "title": "Bookings",
+      "description": "Customer bookings for photography sessions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "packageId": { "type": "string" },
+        "packageName": { "type": "string" },
+        "eventType": { "type": "string" },
+        "location": { "type": "string" },
+        "date": { "type": "string" },
+        "timeSlot": { "type": "string" },
+        "notes": { "type": "string" },
+        "totalPrice": { "type": "number" },
+        "dpAmount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Menunggu DP", "Menunggu Verifikasi", "DP Diverifikasi", "DP Lunas", "Sedang Berlangsung", "Selesai", "Dibatalkan"] },
+        "paymentProof": {
+          "type": "object",
+          "properties": {
+            "senderName": { "type": "string" },
+            "bankName": { "type": "string" },
+            "transferDate": { "type": "string" },
+            "nominal": { "type": "number" },
+            "refNumber": { "type": "string" },
+            "proofUrl": { "type": "string" },
+            "rejectionReason": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "blockedSlots": {
+      "title": "Blocked Slots",
+      "description": "Dates or times blocked by Admin or Holidays",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "timeSlot": { "type": "string" },
+        "reason": { "type": "string" },
+        "isFullDay": { "type": "boolean" }
+      }
+    },
+    "portfolio": {
+      "title": "Portfolio",
+      "description": "Photo and video portfolio items",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "mediaType": { "type": "string", "enum": ["photo", "video"] },
+        "mediaUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "featured": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "reviews": {
+      "title": "Reviews",
+      "description": "Customer reviews and ratings",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "approved": { "type": "boolean" }
+      }
+    },
+    "chats": {
+      "title": "Chats",
+      "description": "Chat messages between customer and admin",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "text": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaType": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "description": "Notifications for customers and admins",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Global studio settings like QRIS image URL, bank info",
+      "type": "object",
+      "properties": {
+        "qrisUrl": { "type": "string" },
+        "bankName": { "type": "string" },
+        "bankAccount": { "type": "string" },
+        "accountHolder": { "type": "string" },
+        "whatsappNumber": { "type": "string" }
+      }
+    }
+  }
+}
