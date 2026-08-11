@@ -229,36 +229,38 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#20040C] border border-[#D4AF37]/30 rounded-2xl shadow-2xl overflow-hidden my-8 p-6 text-white">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md animate-fadeIn flex items-center justify-center p-3 sm:p-4">
+      <div className="relative w-full max-w-2xl bg-[#20040C] border border-[#D4AF37]/40 rounded-2xl shadow-2xl overflow-hidden my-auto p-4 sm:p-6 text-white max-h-[92vh] flex flex-col">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        {/* Header - Fixed at Top */}
+        <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10 shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-sm bg-[#D4AF37] text-black flex items-center justify-center font-bold">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-sm bg-[#D4AF37] text-black flex items-center justify-center font-bold shrink-0">
               <Camera className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold font-serif text-[#D4AF37]">Formulir Booking HadsProject</h3>
-              <p className="text-xs text-gray-300">Pilih jadwal, waktu slot, dan informasi acara foto & video Anda</p>
+              <h3 className="text-base sm:text-lg font-bold font-serif text-[#D4AF37]">Formulir Booking HadsProject</h3>
+              <p className="text-[11px] sm:text-xs text-gray-300">Pilih jadwal, waktu slot, dan informasi acara foto & video Anda</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {errorMsg && (
-          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-xs rounded-xl flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {/* Scrollable Form Body */}
+        <div className="overflow-y-auto mt-3 sm:mt-4 pr-1 space-y-4 text-xs">
+          {errorMsg && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-xs rounded-xl flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           
           {/* Choose Package */}
           <div className="space-y-2">
@@ -554,6 +556,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           </div>
         </form>
 
+        </div>
       </div>
     </div>
   );

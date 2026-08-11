@@ -676,25 +676,6 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Google Drive Upload Storage Card */}
-                  <div className="p-4 bg-gradient-to-r from-blue-950/50 to-neutral-950 border border-blue-500/30 rounded-2xl space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-300">Google Drive Studio Storage</span>
-                      <a
-                        href={settings?.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] uppercase rounded-lg flex items-center space-x-1"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        <span>Buka Drive Studio</span>
-                      </a>
-                    </div>
-                    <p className="text-[11px] text-gray-300 leading-relaxed">
-                      Anda dapat mengunggah struk bukti transfer atau file ke Folder Google Drive HadsProject di atas, lalu tempelkan link berkasnya ke form konfirmasi.
-                    </p>
-                  </div>
-
                   {/* Google Drive Result Photos Link (If Admin attached it) */}
                   {selectedBooking.googleDriveResultUrl && (
                     <div className="p-4 bg-gradient-to-r from-emerald-950 to-neutral-950 border border-emerald-500/50 rounded-2xl space-y-3">
@@ -825,27 +806,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="space-y-3 p-3 bg-neutral-950 border border-neutral-800 rounded-2xl">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-amber-300 font-bold text-xs flex items-center gap-1.5">
-                            <ImageIcon className="w-4 h-4 text-amber-400" />
-                            <span>Unggah Bukti Transfer</span>
-                          </label>
-                          <a
-                            href={settings?.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Drive Studio</span>
-                          </a>
-                        </div>
+                      <div className="space-y-3 p-3.5 bg-neutral-950 border border-neutral-800 rounded-2xl">
+                        <label className="block text-amber-300 font-bold text-xs flex items-center gap-1.5">
+                          <ImageIcon className="w-4 h-4 text-amber-400" />
+                          <span>Unggah Bukti Struk Transfer</span>
+                        </label>
 
                         {/* File Upload Selector */}
                         <div>
                           <label className="block text-[11px] text-neutral-400 mb-1">
-                            Metode 1: Pilih File Foto Struk Dari Perangkat (HP / Laptop)
+                            Pilih Foto / Gambar Struk dari HP atau Laptop
                           </label>
                           <input
                             type="file"
@@ -855,16 +825,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           />
                         </div>
 
-                        {/* Google Drive URL Input */}
+                        {/* Image URL Alternative */}
                         <div>
                           <label className="block text-[11px] text-neutral-400 mb-1">
-                            Metode 2: Atau Tempelkan Link Google Drive / Image URL Struk
+                            Atau Masukkan URL Gambar Struk (Opsional)
                           </label>
                           <input
                             type="url"
                             value={proofUrl}
                             onChange={(e) => setProofUrl(e.target.value)}
-                            placeholder="https://drive.google.com/file/d/... atau https://..."
+                            placeholder="https://..."
                             className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-xl text-neutral-200 text-xs focus:outline-none focus:border-amber-400 font-mono"
                           />
                         </div>
