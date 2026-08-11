@@ -218,5 +218,8 @@ export const DEFAULT_STUDIO_SETTINGS: StudioSettings = {
   whatsappNumber: '085284206829',
   studioAddress: 'Jakarta Indonesia',
   studioEmail: 'creative.hadsproject@gmail.com',
-  googleDriveFolderUrl: 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'
+  googleDriveFolderUrl: 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing',
+  googleSheetsAppScriptUrl: '',
+  adminUsername: 'admin',
+  adminPassword: 'HADS2026'
 };

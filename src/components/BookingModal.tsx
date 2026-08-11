@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, Clock, MapPin, User, Phone, Mail, FileText, CheckCircle2, AlertCircle, Camera } from 'lucide-react';
-import { PackageItem, EventType, Booking, UserProfile, BlockedSlot } from '../types';
-import { db, collection, getDocs, addDoc, query, where } from '../lib/firebase';
+import { X, Calendar as CalendarIcon, Clock, MapPin, User, Phone, Mail, FileText, CheckCircle2, AlertCircle, Camera, Sparkles } from 'lucide-react';
+import { PackageItem, EventType, Booking, UserProfile, BlockedSlot, StudioSettings } from '../types';
+import { db, collection, getDocs, addDoc, query, where, doc, getDoc } from '../lib/firebase';
+import { sendToGoogleSheets } from '../lib/googleSheets';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -16,7 +17,8 @@ const TIME_SLOTS = [
   '08.00 - 12.00',
   '12.00 - 16.00',
   '16.00 - 20.00',
-  '20.00 - 24.00'
+  '20.00 - 24.00',
+  'Full Day (1 Hari Penuh - Blokir 08.00 - 24.00)'
 ];
 
 export const BookingModal: React.FC<BookingModalProps> = ({
@@ -100,11 +102,21 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const getSlotBookingCount = (slot: string) => {
     if (!date) return 0;
 
-    // Check admin blocked slots first
+    // Check if there's any customer booking for Full Day on this date
+    const hasFullDayBooking = existingBookings.some((b) => {
+      if (b.date !== date) return false;
+      const s = (b.timeSlot || '').toLowerCase();
+      return s.includes('full day') || s.includes('1 hari');
+    });
+
+    if (hasFullDayBooking) return 2; // Full day is booked, all slots blocked!
+
+    // Check admin blocked slots
     const isBlockedByAdmin = blockedSlots.some((b) => {
       if (b.date !== date) return false;
       if (b.isFullDay || b.timeSlot === 'ALL') return true;
       if (b.timeSlot === slot) return true;
+      if (slot.includes('Full Day') && b.timeSlot) return true;
       if (slot.includes('08.00') && (b.timeSlot === '09.00' || b.timeSlot === '11.00')) return true;
       if (slot.includes('12.00') && (b.timeSlot === '13.00' || b.timeSlot === '15.00')) return true;
       if (slot.includes('16.00') && b.timeSlot === '17.00') return true;
@@ -112,6 +124,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     });
 
     if (isBlockedByAdmin) return 2; // Treat as fully blocked (2/2)
+
+    // If requested slot is "Full Day", check if ANY booking exists on this date
+    if (slot.includes('Full Day')) {
+      const anyBookingOnDate = existingBookings.some((b) => b.date === date);
+      if (anyBookingOnDate) return 2; // Can't book Full Day if part of date is already booked
+    }
 
     // Count active customer bookings matching this date and timeSlot
     const bookingCount = existingBookings.filter((b) => {
@@ -175,6 +193,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
       const docRef = await addDoc(collection(db, 'bookings'), newBooking);
       const created: Booking = { ...newBooking, id: docRef.id };
+
+      // Push to Google Sheets if WebApp URL is configured
+      try {
+        const settingsSnap = await getDoc(doc(db, 'settings', 'global'));
+        if (settingsSnap.exists()) {
+          const sData = settingsSnap.data() as StudioSettings;
+          if (sData.googleSheetsAppScriptUrl) {
+            sendToGoogleSheets(sData.googleSheetsAppScriptUrl, 'sync_booking', created);
+          }
+        }
+      } catch (e) {
+        console.warn('Auto sync booking to Google Sheets error:', e);
+      }
 
       // Add notification for customer
       await addDoc(collection(db, 'notifications'), {
@@ -335,6 +366,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {TIME_SLOTS.map((slot) => {
+                  const isFullDaySlot = slot.includes('Full Day');
                   const count = getSlotBookingCount(slot);
                   const full = count >= 2;
                   const isSelected = timeSlot === slot;
@@ -346,28 +378,35 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       key={slot}
                       disabled={full}
                       onClick={() => setTimeSlot(slot)}
-                      className={`p-3 rounded-md font-bold transition-all border text-left flex flex-col justify-between relative overflow-hidden ${
+                      className={`p-3 rounded-xl font-bold transition-all border text-left flex flex-col justify-between relative overflow-hidden ${
+                        isFullDaySlot ? 'sm:col-span-2' : ''
+                      } ${
                         full
                           ? 'bg-neutral-950/80 border-red-900/40 cursor-not-allowed opacity-60'
                           : isSelected
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37] shadow-lg shadow-[#D4AF37]/20 scale-[1.01]'
+                          ? isFullDaySlot
+                            ? 'bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-black border-amber-300 shadow-xl shadow-amber-500/20 scale-[1.01]'
+                            : 'bg-[#D4AF37] text-black border-[#D4AF37] shadow-lg shadow-[#D4AF37]/20 scale-[1.01]'
                           : partial
                           ? 'bg-[#2A0610] text-amber-200 border-amber-500/50 hover:border-amber-400'
+                          : isFullDaySlot
+                          ? 'bg-amber-950/30 text-amber-200 border-amber-500/40 hover:border-amber-400'
                           : 'bg-neutral-900 text-gray-200 border-white/10 hover:border-[#D4AF37]/60'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
                         <span
-                          className={`text-sm font-mono font-bold tracking-wide ${
+                          className={`text-sm font-mono font-bold tracking-wide flex items-center gap-1.5 ${
                             full ? 'line-through decoration-red-500 decoration-2 text-red-400' : ''
                           }`}
                         >
-                          {slot} WIB
+                          {isFullDaySlot && <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />}
+                          {slot}
                         </span>
 
                         {full ? (
                           <span className="text-[9px] px-2 py-0.5 rounded bg-red-950 text-red-400 border border-red-500/30 font-extrabold uppercase tracking-wider">
-                            Full (2/2)
+                            Full / Terisi
                           </span>
                         ) : partial ? (
                           <span
@@ -384,17 +423,21 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                             className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
                               isSelected
                                 ? 'bg-black text-[#D4AF37]'
+                                : isFullDaySlot
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                                 : 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
                             }`}
                           >
-                            Tersedia (0/2)
+                            {isFullDaySlot ? '1 Hari Penuh' : 'Tersedia (0/2)'}
                           </span>
                         )}
                       </div>
 
                       <div className="mt-1 flex items-center justify-between text-[10px]">
-                        <span className={isSelected ? 'text-black/80 font-medium' : 'text-gray-400'}>
-                          Durasi: 4 Jam Sesi
+                        <span className={isSelected ? 'text-black/90 font-semibold' : 'text-gray-400'}>
+                          {isFullDaySlot
+                            ? 'Memblokir seluruh jam sesi pada tanggal ini secara eksklusif untuk Anda'
+                            : 'Durasi: 4 Jam Sesi'}
                         </span>
                         {full && (
                           <span className="text-red-400 font-serif font-bold italic line-through">
@@ -406,6 +449,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   );
                 })}
               </div>
+
+              {timeSlot.includes('Full Day') && (
+                <div className="mt-2.5 p-3 bg-amber-500/20 border border-amber-500/50 rounded-xl text-xs text-amber-200 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Opsi 1 Hari Penuh Terpilih:</strong> Seluruh jadwal sesi (08.00 - 24.00) pada tanggal <strong>{date}</strong> akan diblokir total khusus untuk tim / acara Anda!
+                  </span>
+                </div>
+              )}
 
               {getSlotBookingCount(timeSlot) === 1 && (
                 <div className="mt-2.5 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-md text-[11px] text-amber-200 flex items-center gap-2">

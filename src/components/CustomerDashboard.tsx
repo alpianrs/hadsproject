@@ -131,6 +131,22 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     setTimeout(() => setCopyToast(false), 3000);
   };
 
+  // Handle File Upload to Base64 Image Data URL
+  const handleProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Ukuran file maksimal 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Submit Payment DP Proof
   const handleSubmitPaymentProof = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -512,9 +528,16 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 Ketersediaan Slot Jam Pada Tanggal: {selectedCalendarDate}
               </span>
 
-              <div className="grid grid-cols-5 gap-3">
-                {['09.00', '11.00', '13.00', '15.00', '17.00'].map((slot) => {
-                  const bkgOnDate = bookings.find((b) => b.date === selectedCalendarDate && b.timeSlot === slot);
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {['08.00 - 12.00', '12.00 - 16.00', '16.00 - 20.00', '20.00 - 24.00', 'Full Day (08.00 - 24.00)'].map((slot) => {
+                  const bkgOnDate = bookings.find((b) => {
+                    if (b.date !== selectedCalendarDate) return false;
+                    if (b.timeSlot === slot) return true;
+                    if (b.timeSlot?.toLowerCase().includes('full day')) return true;
+                    return false;
+                  });
+                  const isFullDay = bkgOnDate?.timeSlot?.toLowerCase().includes('full day');
+
                   return (
                     <div
                       key={slot}
@@ -524,9 +547,13 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           : 'bg-neutral-900 border-neutral-800 text-neutral-400'
                       }`}
                     >
-                      <span className="text-sm font-bold">{slot} WIB</span>
+                      <span className="text-xs font-bold font-mono">{slot}</span>
                       <span className="text-[10px] uppercase tracking-wider mt-1 font-semibold">
-                        {bkgOnDate ? `Booked (${bkgOnDate.packageName})` : 'Tersedia'}
+                        {bkgOnDate
+                          ? isFullDay
+                            ? 'Full Day Booked'
+                            : `Terisi (${bkgOnDate.packageName})`
+                          : 'Tersedia'}
                       </span>
                     </div>
                   );
@@ -743,15 +770,67 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-neutral-400 mb-1">URL / Link Gambar Struk Bukti Transfer</label>
-                        <input
-                          type="url"
-                          value={proofUrl}
-                          onChange={(e) => setProofUrl(e.target.value)}
-                          placeholder="https://..."
-                          className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-neutral-200 focus:outline-none focus:border-amber-400"
-                        />
+                      <div className="space-y-3 p-3 bg-neutral-950 border border-neutral-800 rounded-2xl">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-amber-300 font-bold text-xs flex items-center gap-1.5">
+                            <ImageIcon className="w-4 h-4 text-amber-400" />
+                            <span>Unggah Bukti Transfer (File / Google Drive)</span>
+                          </label>
+                          <a
+                            href={settings?.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Upload ke Drive Studio</span>
+                          </a>
+                        </div>
+
+                        {/* File Upload Selector */}
+                        <div>
+                          <label className="block text-[11px] text-neutral-400 mb-1">
+                            Metode 1: Pilih File Foto Struk Dari Perangkat (HP / Laptop)
+                          </label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleProofFileChange}
+                            className="w-full text-xs text-neutral-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-neutral-950 hover:file:bg-amber-400 file:cursor-pointer cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 p-1"
+                          />
+                        </div>
+
+                        {/* Google Drive URL Input */}
+                        <div>
+                          <label className="block text-[11px] text-neutral-400 mb-1">
+                            Metode 2: Atau Tempelkan Link Google Drive / Image URL Struk
+                          </label>
+                          <input
+                            type="url"
+                            value={proofUrl}
+                            onChange={(e) => setProofUrl(e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... atau https://..."
+                            className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-xl text-neutral-200 text-xs focus:outline-none focus:border-amber-400 font-mono"
+                          />
+                        </div>
+
+                        {/* Proof Image Thumbnail Preview */}
+                        {proofUrl && (
+                          <div className="p-2 bg-neutral-900 border border-amber-500/30 rounded-xl space-y-1">
+                            <span className="text-[10px] text-emerald-400 font-bold block">✓ Bukti Transfer Siap Dikirim:</span>
+                            {proofUrl.startsWith('data:image') || proofUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                              <img
+                                src={proofUrl}
+                                alt="Pratinjau Bukti Transfer"
+                                className="w-full h-32 object-contain rounded-lg border border-neutral-800 bg-black/60"
+                              />
+                            ) : (
+                              <p className="text-[11px] font-mono text-blue-300 truncate p-1 bg-black rounded">
+                                🔗 {proofUrl}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <button

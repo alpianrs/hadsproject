@@ -149,4 +149,7 @@ export interface StudioSettings {
   studioAddress: string;
   studioEmail: string;
   googleDriveFolderUrl?: string;
+  googleSheetsAppScriptUrl?: string;
+  adminUsername?: string;
+  adminPassword?: string;
 }

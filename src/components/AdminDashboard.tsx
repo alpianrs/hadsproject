@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, TrendingUp, Calendar, DollarSign, Clock, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Plus, Edit, Trash, Download, Filter, Search, Eye, Settings, Image as ImageIcon, Send, RefreshCw, X, Layers, ExternalLink, Folder } from 'lucide-react';
+import { Shield, TrendingUp, Calendar, DollarSign, Clock, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Plus, Edit, Trash, Download, Filter, Search, Eye, Settings, Image as ImageIcon, Send, RefreshCw, X, Layers, ExternalLink, Folder, FileSpreadsheet, Copy, Check, Database, Sparkles, Code, FileText } from 'lucide-react';
 import { Booking, PackageItem, PortfolioItem, Review, StudioSettings, BlockedSlot, ChatMessage, UserProfile } from '../types';
 import { db, collection, onSnapshot, updateDoc, doc, addDoc, deleteDoc, setDoc } from '../lib/firebase';
 import { generateInvoicePDF } from '../lib/generateInvoice';
+import { GOOGLE_APPS_SCRIPT_CODE, sendToGoogleSheets, testGoogleSheetsConnection, syncAllDataToGoogleSheets } from '../lib/googleSheets';
 
 interface AdminDashboardProps {
   currentUser: UserProfile;
@@ -64,6 +65,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editAddress, setEditAddress] = useState(settings?.studioAddress || 'Jakarta Indonesia');
   const [editEmail, setEditEmail] = useState(settings?.studioEmail || 'creative.hadsproject@gmail.com');
   const [editDriveUrl, setEditDriveUrl] = useState(settings?.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing');
+  const [editSheetsUrl, setEditSheetsUrl] = useState(settings?.googleSheetsAppScriptUrl || '');
+  const [editAdminUsername, setEditAdminUsername] = useState(settings?.adminUsername || 'admin');
+  const [editAdminPassword, setEditAdminPassword] = useState(settings?.adminPassword || 'HADS2026');
+
+  // Google Sheets Sync States
+  const [isTestingSheets, setIsTestingSheets] = useState(false);
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
+  const [sheetsSyncStatus, setSheetsSyncStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [proofModalBooking, setProofModalBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -75,8 +87,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setEditAddress(settings.studioAddress || 'Jakarta Indonesia');
       setEditEmail(settings.studioEmail || 'creative.hadsproject@gmail.com');
       setEditDriveUrl(settings.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing');
+      setEditSheetsUrl(settings.googleSheetsAppScriptUrl || '');
+      setEditAdminUsername(settings.adminUsername || 'admin');
+      setEditAdminPassword(settings.adminPassword || 'HADS2026');
     }
   }, [settings]);
+
+  // Test Google Sheets Connection
+  const handleTestSheetsConnection = async () => {
+    if (!editSheetsUrl.trim()) {
+      setSheetsSyncStatus({ type: 'error', message: 'Silakan isi URL Google Apps Script Web App terlebih dahulu.' });
+      return;
+    }
+    setIsTestingSheets(true);
+    setSheetsSyncStatus(null);
+    const result = await testGoogleSheetsConnection(editSheetsUrl);
+    setIsTestingSheets(false);
+    if (result.success) {
+      setSheetsSyncStatus({ type: 'success', message: '✅ ' + result.message });
+    } else {
+      setSheetsSyncStatus({ type: 'error', message: '❌ ' + result.message });
+    }
+  };
+
+  // Sync All Data to Google Sheets
+  const handleSyncAllSheets = async () => {
+    if (!editSheetsUrl.trim()) {
+      setSheetsSyncStatus({ type: 'error', message: 'Silakan isi URL Google Apps Script Web App terlebih dahulu.' });
+      return;
+    }
+    setIsSyncingSheets(true);
+    setSheetsSyncStatus(null);
+    const currentSet: StudioSettings = {
+      bankName: editBankName,
+      bankAccount: editBankAcc,
+      accountHolder: editBankHolder,
+      qrisUrl: editQrisUrl,
+      whatsappNumber: editWaNum,
+      studioAddress: editAddress,
+      studioEmail: editEmail,
+      googleDriveFolderUrl: editDriveUrl,
+      googleSheetsAppScriptUrl: editSheetsUrl,
+      adminUsername: editAdminUsername || 'admin',
+      adminPassword: editAdminPassword || 'HADS2026'
+    };
+
+    const result = await syncAllDataToGoogleSheets(editSheetsUrl, {
+      bookings,
+      packages,
+      blockedSlots,
+      reviews,
+      settings: currentSet
+    });
+    setIsSyncingSheets(false);
+    if (result.success) {
+      setSheetsSyncStatus({ type: 'success', message: '🚀 ' + result.message });
+    } else {
+      setSheetsSyncStatus({ type: 'error', message: '❌ ' + result.message });
+    }
+  };
+
+  const handleCopyScriptCode = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2500);
+  };
 
   // Realtime Listeners for Admin
   useEffect(() => {
@@ -150,9 +225,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Approve DP
   const handleApproveDp = async (booking: Booking) => {
     try {
+      const updated = { ...booking, status: 'DP Lunas' as const };
       await updateDoc(doc(db, 'bookings', booking.id), {
         status: 'DP Lunas'
       });
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_booking', updated);
+      }
 
       // Send notification to customer
       await addDoc(collection(db, 'notifications'), {
@@ -176,10 +256,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!rejectionModalBooking || !rejectionReason.trim()) return;
 
     try {
+      const updated = { ...rejectionModalBooking, status: 'Menunggu DP' as const };
       await updateDoc(doc(db, 'bookings', rejectionModalBooking.id), {
         status: 'Menunggu DP',
         'paymentProof.rejectionReason': rejectionReason
       });
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_booking', updated);
+      }
 
       await addDoc(collection(db, 'notifications'), {
         userId: rejectionModalBooking.customerId,
@@ -204,10 +289,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!rescheduleModalBooking || !newRescheduleDate) return;
 
     try {
+      const updated = { ...rescheduleModalBooking, date: newRescheduleDate, timeSlot: newRescheduleTime };
       await updateDoc(doc(db, 'bookings', rescheduleModalBooking.id), {
         date: newRescheduleDate,
         timeSlot: newRescheduleTime
       });
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_booking', updated);
+      }
 
       await addDoc(collection(db, 'notifications'), {
         userId: rescheduleModalBooking.customerId,
@@ -347,7 +437,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Save Settings
   const handleSaveSettings = async () => {
     try {
-      await setDoc(doc(db, 'settings', 'global'), {
+      const updatedSettings: StudioSettings = {
         bankName: editBankName,
         bankAccount: editBankAcc,
         accountHolder: editBankHolder,
@@ -355,9 +445,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         whatsappNumber: editWaNum,
         studioAddress: editAddress,
         studioEmail: editEmail,
-        googleDriveFolderUrl: editDriveUrl
-      });
-      alert('Pengaturan Studio HadsProject berhasil disimpan.');
+        googleDriveFolderUrl: editDriveUrl,
+        googleSheetsAppScriptUrl: editSheetsUrl,
+        adminUsername: editAdminUsername || 'admin',
+        adminPassword: editAdminPassword || 'HADS2026'
+      };
+
+      await setDoc(doc(db, 'settings', 'global'), updatedSettings);
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_all_data', {
+          bookings,
+          packages,
+          blockedSlots,
+          reviews,
+          settings: updatedSettings
+        });
+      }
+
+      alert('Pengaturan Studio & Kredensial Admin berhasil disimpan serta disinkronkan ke Google Sheets.');
     } catch (err) {
       console.error('Save settings error:', err);
     }
@@ -666,10 +772,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="p-3">
                           {b.paymentProof ? (
                             <button
-                              onClick={() => alert(`Bukti Transfer:\nPengirim: ${b.paymentProof?.senderName}\nBank: ${b.paymentProof?.bankName}\nNominal: Rp ${b.paymentProof?.nominal.toLocaleString('id-ID')}\nRef: ${b.paymentProof?.refNumber}`)}
-                              className="text-amber-400 underline text-[11px]"
+                              onClick={() => setProofModalBooking(b)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] transition-all flex items-center gap-1"
                             >
-                              Lihat Struk DP
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>Lihat Struk DP</span>
                             </button>
                           ) : (
                             <span className="text-neutral-600 text-[10px]">Belum Transfer</span>
@@ -1238,9 +1345,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* 7. SETTINGS TAB */}
         {activeTab === 'settings' && (
-          <div className="bg-neutral-900 border border-white/10 rounded-sm p-6 max-w-xl mx-auto space-y-6 shadow-xl">
-            <h3 className="text-lg font-bold font-serif text-[#D4AF37]">Pengaturan Studio & Pembayaran</h3>
+          <div className="bg-neutral-900 border border-white/10 rounded-sm p-6 max-w-2xl mx-auto space-y-6 shadow-xl">
+            <h3 className="text-lg font-bold font-serif text-[#D4AF37]">Pengaturan Studio & Integrasi Database</h3>
             
+            {/* GOOGLE SHEETS INTEGRATION BOX */}
+            <div className="p-5 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-4 shadow-inner">
+              <div className="flex items-center justify-between pb-3 border-b border-emerald-500/20">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 rounded-lg bg-emerald-500 text-neutral-950 font-bold">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-emerald-300 flex items-center gap-1.5">
+                      <span>Integrasi Google Sheets Database (Apps Script)</span>
+                      <span className="px-2 py-0.5 text-[9px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30">
+                        ONLINE SYNC
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-emerald-200/70">
+                      Hubungkan website HadsProject ke Google Sheets untuk menyimpan otomatis semua booking, paket, dan data.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSheetsModalOpen(true)}
+                  className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-bold flex items-center space-x-1.5 transition-all shrink-0"
+                >
+                  <Code className="w-3.5 h-3.5" />
+                  <span>Kode & Panduan Script</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] text-emerald-300/90 font-medium mb-1">
+                    URL Google Apps Script Web App (Berakhiran <code className="text-emerald-400">{"/exec"}</code>)
+                  </label>
+                  <input
+                    type="url"
+                    value={editSheetsUrl}
+                    onChange={(e) => setEditSheetsUrl(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
+                    className="w-full px-3 py-2 bg-neutral-950 border border-emerald-500/30 rounded-md text-emerald-100 font-mono text-xs focus:border-emerald-400 focus:outline-none placeholder:text-neutral-600"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestSheetsConnection}
+                    disabled={isTestingSheets}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-neutral-950 font-bold text-xs rounded transition-all flex items-center space-x-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingSheets ? 'animate-spin' : ''}`} />
+                    <span>{isTestingSheets ? 'Menguji...' : 'Uji Koneksi Sheets'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSyncAllSheets}
+                    disabled={isSyncingSheets}
+                    className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-neutral-950 font-bold text-xs rounded transition-all flex items-center space-x-1.5"
+                  >
+                    <Database className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingSheets ? 'Menyinkronkan...' : 'Sinkronkan Semua Data'}</span>
+                  </button>
+                </div>
+
+                {sheetsSyncStatus && (
+                  <div className={`p-3 rounded-md text-xs border font-medium flex items-center justify-between ${
+                    sheetsSyncStatus.type === 'success'
+                      ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+                      : 'bg-rose-950/80 border-rose-500/50 text-rose-200'
+                  }`}>
+                    <span>{sheetsSyncStatus.message}</span>
+                    <button onClick={() => setSheetsSyncStatus(null)} className="text-neutral-400 hover:text-white">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1344,6 +1532,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
+              {/* ADMIN LOGIN CREDENTIALS CONFIG BOX */}
+              <div className="p-4 bg-amber-950/30 border border-amber-500/40 rounded-xl space-y-3">
+                <div className="flex items-center space-x-2 text-amber-300 font-bold text-xs">
+                  <Shield className="w-4 h-4 text-amber-400" />
+                  <span>Kredensial Akun Admin Studio (Username & Kata Sandi)</span>
+                </div>
+                <p className="text-[11px] text-amber-200/80">
+                  Kredensial ini digunakan untuk masuk/login Tim Admin HadsProject. Anda dapat menggantinya kapan saja dan otomatis tersinkron ke Google Sheets Database.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-gray-400 mb-1">Username Admin Studio</label>
+                    <input
+                      type="text"
+                      value={editAdminUsername}
+                      onChange={(e) => setEditAdminUsername(e.target.value)}
+                      placeholder="admin"
+                      className="w-full px-3 py-2 bg-neutral-950 border border-amber-500/40 rounded-sm text-amber-300 font-mono font-bold text-xs focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-400 mb-1">Kata Sandi Admin Studio</label>
+                    <input
+                      type="text"
+                      value={editAdminPassword}
+                      onChange={(e) => setEditAdminPassword(e.target.value)}
+                      placeholder="HADS2026"
+                      className="w-full px-3 py-2 bg-neutral-950 border border-amber-500/40 rounded-sm text-amber-300 font-mono font-bold text-xs focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <button
                 onClick={handleSaveSettings}
                 className="w-full py-3 text-xs font-bold uppercase tracking-widest rounded-sm bg-[#D4AF37] text-black hover:brightness-110 transition-all shadow-md mt-2"
@@ -1355,6 +1576,254 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
       </div>
+
+      {/* GOOGLE SHEETS APPS SCRIPT TUTORIAL MODAL */}
+      {isSheetsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-3xl bg-neutral-900 border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden my-8 p-6 text-white space-y-6">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-lg bg-emerald-500 text-neutral-950 font-bold">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-serif text-emerald-300">
+                    Panduan & Kode Apps Script Google Sheets
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    Ikuti 8 langkah mudah ini untuk menjadikan Google Sheets sebagai database HadsProject
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsSheetsModalOpen(false)}
+                className="p-1.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-gray-300 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Step-by-Step Tutorial */}
+            <div className="space-y-3 text-xs text-neutral-200 bg-neutral-950/80 p-4 rounded-xl border border-neutral-800">
+              <h4 className="font-bold text-amber-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Langkah-Langkah Pemasangan di Google Sheets:</span>
+              </h4>
+
+              <ol className="space-y-2 pl-2 text-neutral-300">
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">1</span>
+                  <span>Buka <a href="https://sheets.google.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline font-semibold">Google Sheets</a> lalu buat spreadsheet baru (beri nama <strong>HadsProject Studio Database</strong>).</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">2</span>
+                  <span>Klik menu <strong>Extensions (Ekstensi)</strong> → pilih <strong>Apps Script</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">3</span>
+                  <span>Hapus seluruh isi kode default yang ada di editor Apps Script.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">4</span>
+                  <span>Klik tombol <strong>"Salin Script Google Apps Script"</strong> di bawah ini, lalu tempel (Paste) ke editor Apps Script.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">5</span>
+                  <span>Klik ikon <strong>Simpan (Save / Disket)</strong> di bagian atas.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">6</span>
+                  <span>Klik tombol biru <strong>Deploy (Terapkan)</strong> di kanan atas → pilih <strong>New deployment (Penerapan baru)</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">7</span>
+                  <span>Pilih jenis: <strong>Web app (Aplikasi Web)</strong>. Atur:
+                    <ul className="list-disc pl-5 mt-1 text-emerald-200/90 space-y-0.5">
+                      <li>Execute as (Jalankan sebagai): <strong>Me (Saya)</strong></li>
+                      <li>Who has access (Siapa yang memiliki akses): <strong>Anyone (Siapa saja)</strong></li>
+                    </ul>
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold flex items-center justify-center text-[10px] shrink-0">8</span>
+                  <span>Klik <strong>Deploy</strong> → Izinkan Akses (Grant Access) → SALIN <strong>Web App URL</strong> (berakhiran <code className="text-emerald-300">{"/exec"}</code>) dan tempelkan ke kolom URL di menu Pengaturan Admin.</span>
+                </li>
+              </ol>
+            </div>
+
+            {/* Code Box with 1-click Copy */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                  <Code className="w-4 h-4" />
+                  <span>Kode Google Apps Script (Code.gs):</span>
+                </span>
+
+                <button
+                  onClick={handleCopyScriptCode}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center space-x-1.5 transition-all shadow-lg ${
+                    copiedScript
+                      ? 'bg-emerald-500 text-neutral-950'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-neutral-950'
+                  }`}
+                >
+                  {copiedScript ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedScript ? 'Berhasil Disalin!' : 'Salin Script Apps Script'}</span>
+                </button>
+              </div>
+
+              <div className="relative rounded-xl bg-neutral-950 border border-neutral-800 p-4 max-h-72 overflow-y-auto font-mono text-[11px] text-emerald-300/90 leading-relaxed selection:bg-emerald-500 selection:text-neutral-950">
+                <pre>{GOOGLE_APPS_SCRIPT_CODE}</pre>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2 border-t border-white/10">
+              <button
+                onClick={() => setIsSheetsModalOpen(false)}
+                className="px-5 py-2.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs"
+              >
+                Tutup Panduan
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* BUKTI TRANSFER PREVIEW MODAL */}
+      {proofModalBooking && proofModalBooking.paymentProof && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-neutral-900 border border-amber-500/40 rounded-2xl shadow-2xl p-6 text-white space-y-5 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-lg bg-amber-500 text-neutral-950 font-bold">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-serif text-amber-300">
+                    Detail Struk & Bukti Transfer DP
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    Invoice: <span className="font-mono text-amber-200">{proofModalBooking.invoiceNumber || 'INV-' + proofModalBooking.id.slice(0, 6)}</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setProofModalBooking(null)}
+                className="p-1.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-gray-300 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Financial & Transfer Info */}
+            <div className="grid grid-cols-2 gap-3 text-xs bg-neutral-950 p-4 rounded-xl border border-neutral-800">
+              <div>
+                <span className="text-[10px] text-neutral-500 uppercase block">Nama Pelanggan</span>
+                <span className="font-bold text-neutral-200">{proofModalBooking.customerName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-neutral-500 uppercase block">Paket Foto</span>
+                <span className="font-bold text-amber-300">{proofModalBooking.packageName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-neutral-500 uppercase block">Pengirim Transfer</span>
+                <span className="font-semibold text-neutral-300">{proofModalBooking.paymentProof.senderName} ({proofModalBooking.paymentProof.bankName})</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-neutral-500 uppercase block">Nominal Ditransfer</span>
+                <span className="font-mono font-bold text-emerald-400">Rp {proofModalBooking.paymentProof.nominal.toLocaleString('id-ID')}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-neutral-500 uppercase block">Tanggal Transfer</span>
+                <span className="text-neutral-300">{proofModalBooking.paymentProof.transferDate}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-neutral-500 uppercase block">No. Referensi</span>
+                <span className="font-mono text-amber-200">{proofModalBooking.paymentProof.refNumber || '-'}</span>
+              </div>
+            </div>
+
+            {/* Proof Image / Link Showcase */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-neutral-300 block">Foto / File Struk Transfer:</span>
+              
+              {proofModalBooking.paymentProof.proofUrl.startsWith('data:image') || proofModalBooking.paymentProof.proofUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                <div className="rounded-xl overflow-hidden border border-neutral-800 bg-black p-2 text-center">
+                  <img
+                    src={proofModalBooking.paymentProof.proofUrl}
+                    alt="Bukti Transfer DP"
+                    className="max-h-72 object-contain mx-auto rounded-lg"
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <a
+                  href={proofModalBooking.paymentProof.proofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs rounded-xl flex items-center space-x-1.5 transition-all shadow-md"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Buka Link Bukti Struk</span>
+                </a>
+
+                <a
+                  href={editDriveUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 transition-all shadow-md"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Buka Folder Google Drive Studio</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-white/10">
+              <div className="flex space-x-2">
+                {proofModalBooking.status === 'Menunggu Verifikasi' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        handleApproveDp(proofModalBooking);
+                        setProofModalBooking(null);
+                      }}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs rounded-xl shadow-lg"
+                    >
+                      ✓ Verifikasi & Approve DP
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRejectionModalBooking(proofModalBooking);
+                        setProofModalBooking(null);
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl"
+                    >
+                      ✕ Tolak DP
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => setProofModalBooking(null)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs rounded-xl"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
