@@ -113,10 +113,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   // Handle Customer Google Sign-In
   const handleGoogleAuth = async () => {
     setErrorMsg('');
+    const inputEmail = prompt('Masukkan Email Google / Gmail Pribadi Anda:\n(Setiap transaksi booking Anda akan tersimpan di akun email ini)', email || '');
+    if (!inputEmail || !inputEmail.trim()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const userCred = await signInWithPopup(auth, googleProvider);
+      const userCred = await signInWithPopup(auth, googleProvider, inputEmail.trim());
       const fbUser = userCred.user;
 
       const userDocRef = doc(db, 'users', fbUser.uid);
@@ -133,8 +138,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       } else {
         profile = {
           uid: fbUser.uid,
-          email: fbUser.email || '',
-          displayName: fbUser.displayName || 'Customer HadsProject',
+          email: fbUser.email || inputEmail.trim(),
+          displayName: fbUser.displayName || inputEmail.split('@')[0],
           photoURL: fbUser.photoURL || undefined,
           phoneNumber: fbUser.phoneNumber || '',
           role,

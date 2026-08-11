@@ -225,9 +225,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Approve DP
   const handleApproveDp = async (booking: Booking) => {
     try {
-      const updated = { ...booking, status: 'DP Lunas' as const };
+      const updated = { ...booking, status: 'DP Diverifikasi' as const };
       await updateDoc(doc(db, 'bookings', booking.id), {
-        status: 'DP Lunas'
+        status: 'DP Diverifikasi'
       });
 
       if (editSheetsUrl) {
@@ -237,17 +237,108 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Send notification to customer
       await addDoc(collection(db, 'notifications'), {
         userId: booking.customerId,
-        title: 'DP Berhasil Diverifikasi! (DP Lunas)',
-        message: `Pembayaran DP Anda untuk paket ${booking.packageName} telah disetujui. Jadwal tanggal ${booking.date} jam ${booking.timeSlot} terverifikasi.`,
+        title: 'DP Berhasil Diverifikasi!',
+        message: `Pembayaran DP Rp ${booking.dpAmount.toLocaleString('id-ID')} Anda untuk paket ${booking.packageName} telah disetujui. Silakan lakukan pelunasan sisa Rp ${booking.remainingAmount.toLocaleString('id-ID')}.`,
         type: 'payment',
         isRead: false,
         createdAt: new Date().toISOString(),
         bookingId: booking.id
       });
 
-      alert(`Booking ${booking.invoiceNumber} berhasil disetujui (DP Lunas).`);
+      alert(`Booking ${booking.invoiceNumber} berhasil disetujui (DP Diverifikasi).`);
     } catch (err) {
-      console.error('Approve error:', err);
+      console.error('Approve DP error:', err);
+    }
+  };
+
+  // Approve Pelunasan
+  const handleApprovePelunasan = async (booking: Booking) => {
+    try {
+      const updated = { ...booking, status: 'Lunas' as const, remainingAmount: 0 };
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        status: 'Lunas',
+        remainingAmount: 0
+      });
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_booking', updated);
+      }
+
+      await addDoc(collection(db, 'notifications'), {
+        userId: booking.customerId,
+        title: 'Pembayaran Lunas (100%)',
+        message: `Pembayaran pelunasan Anda untuk paket ${booking.packageName} telah dikonfirmasi LUNAS! Terima kasih telah menggunakan jasa HadsProject Studio.`,
+        type: 'payment',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        bookingId: booking.id
+      });
+
+      alert(`Booking ${booking.invoiceNumber} berhasil disetujui (LUNAS 100%).`);
+    } catch (err) {
+      console.error('Approve Pelunasan error:', err);
+    }
+  };
+
+  // Update Status directly
+  const handleUpdateStatus = async (booking: Booking, newStatus: BookingStatus) => {
+    try {
+      const remaining = newStatus === 'Lunas' ? 0 : booking.remainingAmount;
+      const updated = { ...booking, status: newStatus, remainingAmount: remaining };
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        status: newStatus,
+        remainingAmount: remaining
+      });
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_booking', updated);
+      }
+
+      await addDoc(collection(db, 'notifications'), {
+        userId: booking.customerId,
+        title: `Pembaruan Status Booking: ${newStatus}`,
+        message: `Status booking Anda (${booking.packageName}) diperbarui menjadi: ${newStatus}.`,
+        type: 'booking',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        bookingId: booking.id
+      });
+
+      alert(`Status booking ${booking.invoiceNumber} diubah menjadi "${newStatus}".`);
+    } catch (err) {
+      console.error('Update status error:', err);
+    }
+  };
+
+  // Save Google Drive Result URL for Customer
+  const handleSaveDriveResultUrl = async (booking: Booking) => {
+    const currentUrl = booking.googleDriveResultUrl || editDriveUrl || '';
+    const inputUrl = prompt('Masukkan Link Folder Google Drive Hasil Foto/Video Pelanggan:\n(Link ini akan muncul langsung di dashboard pelanggan)', currentUrl);
+    if (inputUrl === null) return;
+
+    try {
+      const updated = { ...booking, googleDriveResultUrl: inputUrl.trim() };
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        googleDriveResultUrl: inputUrl.trim()
+      });
+
+      if (editSheetsUrl) {
+        sendToGoogleSheets(editSheetsUrl, 'sync_booking', updated);
+      }
+
+      await addDoc(collection(db, 'notifications'), {
+        userId: booking.customerId,
+        title: '📁 Link Hasil Foto & Video Google Drive Tersedia!',
+        message: `Hasil foto & video untuk ${booking.packageName} telah diunggah ke Google Drive. Klik untuk mengunduh.`,
+        type: 'booking',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        bookingId: booking.id
+      });
+
+      alert('Link Google Drive Hasil Foto berhasil tersimpan & dikirim ke pelanggan.');
+    } catch (err) {
+      console.error('Save Drive URL error:', err);
     }
   };
 
@@ -709,9 +800,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <option value="ALL">Semua Status Booking</option>
                   <option value="Menunggu DP">Menunggu DP</option>
-                  <option value="Menunggu Verifikasi">Menunggu Verifikasi</option>
+                  <option value="Menunggu Verifikasi DP">Menunggu Verifikasi DP</option>
                   <option value="DP Diverifikasi">DP Diverifikasi</option>
-                  <option value="DP Lunas">DP Lunas</option>
+                  <option value="Menunggu Pelunasan">Menunggu Pelunasan</option>
+                  <option value="Menunggu Verifikasi Pelunasan">Menunggu Verifikasi Pelunasan</option>
+                  <option value="Lunas">Lunas (100%)</option>
                   <option value="Sedang Berlangsung">Sedang Berlangsung</option>
                   <option value="Selesai">Selesai</option>
                   <option value="Dibatalkan">Dibatalkan</option>
@@ -770,55 +863,117 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
                         <td className="p-3">{b.date} ({b.timeSlot})</td>
                         <td className="p-3">
-                          {b.paymentProof ? (
-                            <button
-                              onClick={() => setProofModalBooking(b)}
-                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] transition-all flex items-center gap-1"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                              <span>Lihat Struk DP</span>
-                            </button>
-                          ) : (
-                            <span className="text-neutral-600 text-[10px]">Belum Transfer</span>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            {b.paymentProof ? (
+                              <button
+                                onClick={() => setProofModalBooking(b)}
+                                className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[10px] transition-all flex items-center gap-1 w-fit"
+                              >
+                                <FileText className="w-3 h-3" />
+                                <span>Struk DP</span>
+                              </button>
+                            ) : (
+                              <span className="text-neutral-600 text-[10px]">Belum DP</span>
+                            )}
+
+                            {b.fullPaymentProof ? (
+                              <button
+                                onClick={() => setProofModalBooking({ ...b, paymentProof: b.fullPaymentProof })}
+                                className="px-2 py-0.5 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 font-bold text-[10px] transition-all flex items-center gap-1 w-fit"
+                              >
+                                <FileText className="w-3 h-3" />
+                                <span>Struk Pelunasan</span>
+                              </button>
+                            ) : b.status === 'Lunas' ? (
+                              <span className="text-emerald-400 font-bold text-[10px]">✓ Pelunasan OK</span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="p-3">
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                            b.status === 'Lunas' || b.status === 'Selesai'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                              : b.status.includes('Verifikasi')
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-400/40 animate-pulse'
+                              : 'bg-neutral-800 text-neutral-300 border-neutral-700'
+                          }`}>
                             {b.status}
                           </span>
                         </td>
-                        <td className="p-3 flex flex-wrap gap-1">
-                          {b.status === 'Menunggu Verifikasi' && (
-                            <>
-                              <button
-                                onClick={() => handleApproveDp(b)}
-                                className="px-2 py-1 rounded-lg bg-emerald-500 text-neutral-950 font-bold text-[10px] hover:bg-emerald-400"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => setRejectionModalBooking(b)}
-                                className="px-2 py-1 rounded-lg bg-red-600 text-white font-bold text-[10px] hover:bg-red-500"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
+                        <td className="p-3">
+                          <div className="flex flex-col gap-1.5 min-w-[140px]">
+                            {/* Verification Actions */}
+                            {(b.status === 'Menunggu Verifikasi' || b.status === 'Menunggu Verifikasi DP') && (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleApproveDp(b)}
+                                  className="px-2 py-1 rounded bg-emerald-500 text-neutral-950 font-bold text-[10px] hover:bg-emerald-400 flex-1"
+                                >
+                                  Setujui DP
+                                </button>
+                                <button
+                                  onClick={() => setRejectionModalBooking(b)}
+                                  className="px-2 py-1 rounded bg-red-600 text-white font-bold text-[10px] hover:bg-red-500"
+                                >
+                                  Tolak
+                                </button>
+                              </div>
+                            )}
 
-                          <button
-                            onClick={() => setRescheduleModalBooking(b)}
-                            className="px-2 py-1 rounded-lg bg-neutral-800 text-amber-300 font-bold text-[10px] hover:bg-neutral-700"
-                          >
-                            Reschedule
-                          </button>
+                            {b.status === 'Menunggu Verifikasi Pelunasan' && (
+                              <button
+                                onClick={() => handleApprovePelunasan(b)}
+                                className="px-2 py-1 rounded bg-emerald-500 text-neutral-950 font-bold text-[10px] hover:bg-emerald-400 w-full"
+                              >
+                                Setujui Pelunasan (Lunas)
+                              </button>
+                            )}
 
-                          <button
-                            onClick={() => generateInvoicePDF(b, settings)}
-                            className="p-1 rounded-lg bg-neutral-950 text-amber-300 hover:text-white"
-                            title="Invoice PDF"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
+                            {/* Quick Status Selector */}
+                            <select
+                              value={b.status}
+                              onChange={(e) => handleUpdateStatus(b, e.target.value as BookingStatus)}
+                              className="px-2 py-1 bg-neutral-950 border border-neutral-700 rounded text-[10px] text-amber-300 font-medium focus:outline-none focus:border-amber-400"
+                            >
+                              <option value="Menunggu DP">Status: Menunggu DP</option>
+                              <option value="Menunggu Verifikasi DP">Status: Menunggu Verifikasi DP</option>
+                              <option value="DP Diverifikasi">Status: DP Diverifikasi</option>
+                              <option value="Menunggu Pelunasan">Status: Menunggu Pelunasan</option>
+                              <option value="Menunggu Verifikasi Pelunasan">Status: Menunggu Verifikasi Pelunasan</option>
+                              <option value="Lunas">Status: LUNAS (100%)</option>
+                              <option value="Sedang Berlangsung">Status: Sedang Berlangsung</option>
+                              <option value="Selesai">Status: Selesai</option>
+                              <option value="Dibatalkan">Status: Dibatalkan</option>
+                            </select>
+
+                            {/* Secondary Buttons */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleSaveDriveResultUrl(b)}
+                                className="px-2 py-1 rounded bg-blue-900/50 hover:bg-blue-800 text-blue-300 border border-blue-500/30 text-[10px] font-semibold flex-1 flex items-center justify-center gap-1"
+                                title="Masukkan Link Google Drive Hasil Foto/Video"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>{b.googleDriveResultUrl ? 'Edit Link Drive' : '+ Link Hasil'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => setRescheduleModalBooking(b)}
+                                className="p-1 rounded bg-neutral-800 text-amber-300 font-bold text-[10px] hover:bg-neutral-700"
+                                title="Jadwal Ulang"
+                              >
+                                Reschedule
+                              </button>
+
+                              <button
+                                onClick={() => generateInvoicePDF(b, settings)}
+                                className="p-1 rounded bg-neutral-950 text-amber-300 hover:text-white"
+                                title="Unduh PDF Invoice"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ))}

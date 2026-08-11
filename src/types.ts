@@ -41,9 +41,13 @@ export type EventType =
 
 export type BookingStatus =
   | 'Menunggu DP'
+  | 'Menunggu Verifikasi DP'
   | 'Menunggu Verifikasi'
   | 'DP Diverifikasi'
   | 'DP Lunas'
+  | 'Menunggu Pelunasan'
+  | 'Menunggu Verifikasi Pelunasan'
+  | 'Lunas'
   | 'Sedang Berlangsung'
   | 'Selesai'
   | 'Dibatalkan';
@@ -70,13 +74,15 @@ export interface Booking {
   eventType: EventType;
   location: string;
   date: string; // YYYY-MM-DD
-  timeSlot: '09.00' | '11.00' | '13.00' | '15.00' | '17.00';
+  timeSlot: '08.00 - 12.00' | '12.00 - 16.00' | '16.00 - 20.00' | '20.00 - 24.00' | string;
   notes?: string;
   totalPrice: number;
   dpAmount: number;
   remainingAmount: number;
   status: BookingStatus;
-  paymentProof?: PaymentProof;
+  paymentProof?: PaymentProof; // DP Proof
+  fullPaymentProof?: PaymentProof; // Pelunasan Proof
+  googleDriveResultUrl?: string; // Link foto/video hasil akhir di Drive
   invoiceNumber: string;
   createdAt: string;
   updatedAt?: string;
@@ -141,7 +147,7 @@ export interface AppNotification {
 }
 
 export interface StudioSettings {
-  qrisUrl: string;
+  qrisUrl?: string;
   bankName: string;
   bankAccount: string;
   accountHolder: string;

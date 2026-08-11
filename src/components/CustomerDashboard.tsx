@@ -52,29 +52,34 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   // Listen to Customer Bookings
   useEffect(() => {
-    if (!currentUser.uid) return;
+    if (!currentUser.uid && !currentUser.email) return;
 
-    const q = query(
-      collection(db, 'bookings'),
-      where('customerId', '==', currentUser.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(collection(db, 'bookings'), (snapshot) => {
       const bList: Booking[] = [];
+      const userUid = currentUser.uid;
+      const userEmail = (currentUser.email || '').toLowerCase().trim();
+
       snapshot.forEach((docSnap) => {
-        bList.push({ ...docSnap.data() as Booking, id: docSnap.id });
+        const b = { ...docSnap.data() as Booking, id: docSnap.id };
+        const matchUid = b.customerId === userUid;
+        const matchEmail = !!userEmail && !!b.customerEmail && b.customerEmail.toLowerCase().trim() === userEmail;
+
+        if (matchUid || matchEmail) {
+          bList.push(b);
+        }
       });
+
       // Sort by date ascending
       bList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       setBookings(bList);
       if (bList.length > 0 && !selectedBooking) {
         setSelectedBooking(bList[0]);
-        setNominal(bList[0].dpAmount);
+        setNominal(bList[0].status.includes('DP') || bList[0].status === 'Menunggu DP' ? bList[0].dpAmount : bList[0].remainingAmount);
       }
     });
 
     return () => unsubscribe();
-  }, [currentUser.uid]);
+  }, [currentUser.uid, currentUser.email]);
 
   // Listen to Chat Messages
   useEffect(() => {
@@ -147,33 +152,54 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     }
   };
 
-  // Submit Payment DP Proof
+  // Submit Payment Proof (DP or Pelunasan)
   const handleSubmitPaymentProof = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBooking) return;
 
     setPaymentSubmitting(true);
     try {
-      const updatedData = {
-        status: 'Menunggu Verifikasi',
-        paymentProof: {
-          senderName,
-          bankName: senderBank,
-          transferDate,
-          nominal,
-          refNumber,
-          proofUrl: proofUrl || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
-          uploadedAt: new Date().toISOString()
-        }
+      const isPelunasanMode =
+        selectedBooking.status === 'DP Diverifikasi' ||
+        selectedBooking.status === 'DP Lunas' ||
+        selectedBooking.status === 'Menunggu Pelunasan' ||
+        selectedBooking.status === 'Menunggu Verifikasi Pelunasan';
+
+      const proofObj = {
+        senderName,
+        bankName: senderBank,
+        transferDate,
+        nominal,
+        refNumber,
+        proofUrl: proofUrl || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+        uploadedAt: new Date().toISOString()
+      };
+
+      const newStatus = isPelunasanMode ? 'Menunggu Verifikasi Pelunasan' : 'Menunggu Verifikasi DP';
+
+      const updatedData: Partial<Booking> = {
+        status: newStatus as any,
+        ...(isPelunasanMode
+          ? { fullPaymentProof: proofObj }
+          : { paymentProof: proofObj })
       };
 
       await updateDoc(doc(db, 'bookings', selectedBooking.id), updatedData);
 
+      const updatedFullBooking = {
+        ...selectedBooking,
+        ...updatedData
+      };
+
+      if (settings?.googleSheetsAppScriptUrl) {
+        sendToGoogleSheets(settings.googleSheetsAppScriptUrl, 'sync_booking', updatedFullBooking);
+      }
+
       // Create notification for admin
       await addDoc(collection(db, 'notifications'), {
         userId: 'admin',
-        title: 'Bukti Transfer Diterima',
-        message: `${currentUser.displayName} telah mengunggah bukti transfer DP Rp ${nominal.toLocaleString('id-ID')} untuk booking ${selectedBooking.packageName}.`,
+        title: isPelunasanMode ? 'Bukti Transfer Pelunasan Diterima' : 'Bukti Transfer DP Diterima',
+        message: `${currentUser.displayName} telah mengunggah bukti transfer ${isPelunasanMode ? 'Pelunasan' : 'DP'} Rp ${nominal.toLocaleString('id-ID')} untuk booking ${selectedBooking.packageName}.`,
         type: 'payment',
         isRead: false,
         createdAt: new Date().toISOString(),
@@ -181,7 +207,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       });
 
       setShowTransferForm(false);
-      alert('Bukti transfer berhasil dikirim! Admin HadsProject akan melakukan verifikasi.');
+      alert(`Bukti transfer ${isPelunasanMode ? 'Pelunasan' : 'DP'} berhasil dikirim! Admin HadsProject akan melakukan verifikasi.`);
     } catch (err) {
       console.error('Payment error:', err);
       alert('Gagal mengirim bukti transfer.');
@@ -649,10 +675,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Google Drive Upload Card */}
+                  {/* Google Drive Upload Storage Card */}
                   <div className="p-4 bg-gradient-to-r from-blue-950/50 to-neutral-950 border border-blue-500/30 rounded-2xl space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-300">Google Drive Upload Storage</span>
+                      <span className="text-xs font-bold text-blue-300">Google Drive Studio Storage</span>
                       <a
                         href={settings?.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'}
                         target="_blank"
@@ -664,47 +690,74 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       </a>
                     </div>
                     <p className="text-[11px] text-gray-300 leading-relaxed">
-                      Anda dapat mengunggah file gambar/struk bukti transfer langsung ke Folder Google Drive HadsProject di atas, lalu salin link berkasnya ke form konfirmasi.
+                      Anda dapat mengunggah struk bukti transfer atau file ke Folder Google Drive HadsProject di atas, lalu tempelkan link berkasnya ke form konfirmasi.
                     </p>
                   </div>
 
-                  {/* QRIS Code Showcase */}
-                  <div className="p-4 bg-neutral-950 border border-neutral-800 rounded-2xl text-center space-y-3">
-                    <span className="text-xs font-bold text-neutral-300 block">Scan QRIS Pembayaran Semua Bank / E-Wallet</span>
-                    <div className="inline-block p-2 bg-white rounded-xl shadow-lg">
-                      <img
-                        src={settings?.qrisUrl || 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=HADSPROJECT'}
-                        alt="QRIS HadsProject"
-                        className="w-44 h-44 object-contain mx-auto"
-                      />
+                  {/* Google Drive Result Photos Link (If Admin attached it) */}
+                  {selectedBooking.googleDriveResultUrl && (
+                    <div className="p-4 bg-gradient-to-r from-emerald-950 to-neutral-950 border border-emerald-500/50 rounded-2xl space-y-3">
+                      <div className="flex items-center space-x-2 text-emerald-400 font-bold text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Link Hasil Foto & Video Google Drive</span>
+                      </div>
+                      <p className="text-[11px] text-neutral-300">
+                        Admin telah mengunggah hasil foto/video untuk pesanan ini ke Google Drive.
+                      </p>
+                      <a
+                        href={selectedBooking.googleDriveResultUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs rounded-xl flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-500/20"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Buka & Unduh Hasil Foto di Google Drive</span>
+                      </a>
                     </div>
-                    <p className="text-[10px] text-neutral-500">Dukung GoPay, OVO, Dana, LinkAja, ShopeePay & M-Banking</p>
-                  </div>
+                  )}
                 </div>
 
-                {/* Right Card: Transfer Confirmation Form */}
+                {/* Right Card: Transfer Confirmation Form (DP & Pelunasan) */}
                 <div className="bg-neutral-900 border border-amber-500/30 rounded-3xl p-6 space-y-4 shadow-xl">
                   <div className="pb-3 border-b border-neutral-800">
-                    <h3 className="text-lg font-bold font-serif text-amber-200">Konfirmasi Pembayaran DP</h3>
+                    <h3 className="text-lg font-bold font-serif text-amber-200">
+                      {selectedBooking.status === 'DP Diverifikasi' || selectedBooking.status === 'DP Lunas' || selectedBooking.status === 'Menunggu Pelunasan' || selectedBooking.status === 'Menunggu Verifikasi Pelunasan'
+                        ? 'Konfirmasi Pembayaran Pelunasan'
+                        : 'Konfirmasi Pembayaran DP'}
+                    </h3>
                     <p className="text-xs text-neutral-400">
-                      Setelah melakukan transfer, klik tombol di bawah untuk mengunggah bukti transfer
+                      {selectedBooking.status === 'DP Diverifikasi' || selectedBooking.status === 'DP Lunas' || selectedBooking.status === 'Menunggu Pelunasan'
+                        ? `DP telah dikonfirmasi. Sisa pembayaran pelunasan: Rp ${selectedBooking.remainingAmount.toLocaleString('id-ID')}`
+                        : `Minimal pembayaran DP: Rp ${selectedBooking.dpAmount.toLocaleString('id-ID')}`}
                     </p>
                   </div>
 
-                  {selectedBooking.status === 'Menunggu Verifikasi' && (
+                  {(selectedBooking.status === 'Menunggu Verifikasi' || selectedBooking.status === 'Menunggu Verifikasi DP') && (
                     <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs text-amber-300 space-y-1">
-                      <p className="font-bold">✓ Bukti Transfer Dalam Proses Verifikasi Admin</p>
+                      <p className="font-bold">✓ Bukti Transfer DP Dalam Proses Verifikasi Admin</p>
                       <p className="text-neutral-400 text-[11px]">
-                        Admin HadsProject sedang memeriksa kelengkapan transfer Anda. Anda akan mendapatkan notifikasi begitu diverifikasi.
+                        Admin HadsProject sedang memeriksa transfer DP Anda. Status akan diperbarui begitu diverifikasi.
                       </p>
                     </div>
                   )}
 
-                  {selectedBooking.status === 'DP Diverifikasi' || selectedBooking.status === 'DP Lunas' ? (
-                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-xs text-emerald-300 space-y-1">
-                      <p className="font-bold">✓ Pembayaran DP Lunas & Terverifikasi!</p>
+                  {selectedBooking.status === 'Menunggu Verifikasi Pelunasan' && (
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-2xl text-xs text-blue-300 space-y-1">
+                      <p className="font-bold">✓ Bukti Transfer Pelunasan Dalam Verifikasi Admin</p>
+                      <p className="text-neutral-400 text-[11px]">
+                        Admin HadsProject sedang memeriksa bukti pelunasan Anda. Status booking akan berubah menjadi LUNAS setelah diverifikasi.
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedBooking.status === 'Lunas' || selectedBooking.status === 'Selesai' ? (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-xs text-emerald-300 space-y-2">
+                      <div className="flex items-center space-x-2 font-bold text-sm text-emerald-400">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        <span>Pembayaran 100% LUNAS</span>
+                      </div>
                       <p className="text-neutral-300 text-[11px]">
-                        Jadwal fotografi Anda telah dikunci secara resmi.
+                        Terima kasih! Seluruh pembayaran untuk paket <strong>{selectedBooking.packageName}</strong> telah LUNAS.
                       </p>
                     </div>
                   ) : (
@@ -716,6 +769,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           required
                           value={senderName}
                           onChange={(e) => setSenderName(e.target.value)}
+                          placeholder="Nama Pengirim"
                           className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-neutral-200 focus:outline-none focus:border-amber-400"
                         />
                       </div>
@@ -728,7 +782,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             required
                             value={senderBank}
                             onChange={(e) => setSenderBank(e.target.value)}
-                            placeholder="e.g. BCA / Mandiri / GoPay"
+                            placeholder="Mandiri / BCA / GoPay"
                             className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-neutral-200 focus:outline-none focus:border-amber-400"
                           />
                         </div>
@@ -774,7 +828,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         <div className="flex items-center justify-between">
                           <label className="block text-amber-300 font-bold text-xs flex items-center gap-1.5">
                             <ImageIcon className="w-4 h-4 text-amber-400" />
-                            <span>Unggah Bukti Transfer (File / Google Drive)</span>
+                            <span>Unggah Bukti Transfer</span>
                           </label>
                           <a
                             href={settings?.googleDriveFolderUrl || 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing'}
@@ -783,7 +837,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                             className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
                           >
                             <ExternalLink className="w-3 h-3" />
-                            <span>Upload ke Drive Studio</span>
+                            <span>Drive Studio</span>
                           </a>
                         </div>
 
@@ -838,7 +892,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                         disabled={paymentSubmitting}
                         className="w-full py-3 text-xs font-bold rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-neutral-950 hover:from-amber-400 hover:to-amber-200 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50"
                       >
-                        {paymentSubmitting ? 'Mengirim...' : 'Saya Sudah Transfer (Kirim Konfirmasi)'}
+                        {paymentSubmitting ? 'Mengirim...' : 'Kirim Bukti Pembayaran'}
                       </button>
                     </form>
                   )}

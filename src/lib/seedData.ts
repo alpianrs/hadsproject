@@ -211,7 +211,7 @@ export const INITIAL_REVIEWS: Review[] = [
 ];
 
 export const DEFAULT_STUDIO_SETTINGS: StudioSettings = {
-  qrisUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014ID.LINKAJA.WWW0118936009110000000000021520080210030310253033605802ID5911HadsProject6013Jakarta61051211062070703A016304C742',
+  qrisUrl: '',
   bankName: 'Bank Mandiri',
   bankAccount: '1330025480476',
   accountHolder: 'Ahmad Hudatul Jami',
@@ -219,7 +219,7 @@ export const DEFAULT_STUDIO_SETTINGS: StudioSettings = {
   studioAddress: 'Jakarta Indonesia',
   studioEmail: 'creative.hadsproject@gmail.com',
   googleDriveFolderUrl: 'https://drive.google.com/drive/folders/1HbSnPKkMA1SGJKMfejGnx2EInguC1Wt7?usp=sharing',
-  googleSheetsAppScriptUrl: '',
+  googleSheetsAppScriptUrl: 'https://script.google.com/macros/s/AKfycbxeEp82wxFN8KT6xFgrcWeurGmzzr9gXw9SxQ01I5d6tVwqGuMDGkbl6qaHeZPn4fw8/exec',
   adminUsername: 'admin',
   adminPassword: 'HADS2026'
 };

@@ -92,8 +92,8 @@ function saveBookingToSheet(ss, b) {
   var sheet = getOrCreateSheet(ss, 'Bookings', [
     'Invoice', 'Tanggal Booking', 'Jam Slot', 'Kategori', 'Nama Pelanggan',
     'WhatsApp', 'Email', 'Paket Foto', 'Lokasi Acara', 'Total Harga (Rp)',
-    'Minimal DP (Rp)', 'Sisa Pelunasan (Rp)', 'Status Pembayaran', 'Catatan',
-    'Waktu Dibuat', 'Booking ID'
+    'Minimal DP (Rp)', 'Sisa Pelunasan (Rp)', 'Status Pembayaran', 'Link Bukti DP',
+    'Link Bukti Pelunasan', 'Link Drive Hasil Foto', 'Catatan', 'Waktu Dibuat', 'Booking ID'
   ]);
 
   var data = sheet.getDataRange().getValues();
@@ -101,11 +101,15 @@ function saveBookingToSheet(ss, b) {
 
   // Search existing invoice
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] == b.invoiceNumber || data[i][15] == b.id) {
+    if (data[i][0] == b.invoiceNumber || data[i][18] == b.id) {
       rowIndex = i + 1;
       break;
     }
   }
+
+  var dpProofLink = (b.paymentProof && b.paymentProof.proofUrl) ? b.paymentProof.proofUrl : '';
+  var fullProofLink = (b.fullPaymentProof && b.fullPaymentProof.proofUrl) ? b.fullPaymentProof.proofUrl : '';
+  var driveResultLink = b.googleDriveResultUrl || '';
 
   var rowValue = [
     b.invoiceNumber || '',
@@ -121,6 +125,9 @@ function saveBookingToSheet(ss, b) {
     b.dpAmount || 0,
     b.remainingAmount || 0,
     b.status || 'Menunggu DP',
+    dpProofLink,
+    fullProofLink,
+    driveResultLink,
     b.notes || '',
     b.createdAt || new Date().toISOString(),
     b.id || ''
@@ -238,7 +245,6 @@ function saveSettingsToSheet(ss, settings) {
     ['Email Studio', settings.studioEmail || ''],
     ['Alamat Studio', settings.studioAddress || ''],
     ['URL Google Drive Folder', settings.googleDriveFolderUrl || ''],
-    ['URL QRIS Payment', settings.qrisUrl || ''],
     ['Username Admin Studio', settings.adminUsername || 'admin'],
     ['Kata Sandi Admin Studio', settings.adminPassword || 'HADS2026']
   ];

@@ -69,8 +69,38 @@ export function initLocalDatabase() {
   if (!localStorage.getItem(STORAGE_PREFIX + 'reviews')) {
     saveCollectionToStorage('reviews', INITIAL_REVIEWS);
   }
-  if (!localStorage.getItem(STORAGE_PREFIX + 'settings')) {
+
+  const existingSettingsRaw = localStorage.getItem(STORAGE_PREFIX + 'settings');
+  let currentSettings: StudioSettings = DEFAULT_STUDIO_SETTINGS;
+
+  if (!existingSettingsRaw) {
     saveCollectionToStorage('settings', [DEFAULT_STUDIO_SETTINGS]);
+  } else {
+    try {
+      const parsedList = JSON.parse(existingSettingsRaw);
+      const s = parsedList[0] || {};
+      if (!s.googleSheetsAppScriptUrl || !s.googleSheetsAppScriptUrl.trim()) {
+        currentSettings = { ...DEFAULT_STUDIO_SETTINGS, ...s, googleSheetsAppScriptUrl: DEFAULT_STUDIO_SETTINGS.googleSheetsAppScriptUrl };
+        saveCollectionToStorage('settings', [currentSettings]);
+      } else {
+        currentSettings = { ...DEFAULT_STUDIO_SETTINGS, ...s };
+      }
+    } catch {
+      saveCollectionToStorage('settings', [DEFAULT_STUDIO_SETTINGS]);
+    }
+  }
+
+  // Trigger immediate initial data push to Google Sheets
+  if (currentSettings.googleSheetsAppScriptUrl) {
+    setTimeout(() => {
+      sendToGoogleSheets(currentSettings.googleSheetsAppScriptUrl, 'sync_all_data', {
+        bookings: getCollectionFromStorage('bookings'),
+        packages: getCollectionFromStorage('packages'),
+        blockedSlots: getCollectionFromStorage('blockedSlots'),
+        reviews: getCollectionFromStorage('reviews'),
+        settings: currentSettings
+      });
+    }, 500);
   }
 }
 
@@ -316,10 +346,19 @@ export async function firebaseSignOut(authObj?: any) {
 
 export async function signInWithEmailAndPassword(authObj: any, email: string, pass: string) {
   const users = getCollectionFromStorage<UserProfile>('users');
-  const found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  let found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
   if (!found) {
-    throw { code: 'auth/user-not-found', message: 'Email tidak ditemukan.' };
+    const uid = 'usr_' + Date.now();
+    found = {
+      uid,
+      email,
+      displayName: email.split('@')[0],
+      role: email.toLowerCase().trim() === 'creative.hadsproject@gmail.com' ? 'admin' : 'customer',
+      createdAt: new Date().toISOString()
+    };
+    users.push(found);
+    saveCollectionToStorage('users', users);
   }
 
   setCurrentUserSession(found);
@@ -328,26 +367,23 @@ export async function signInWithEmailAndPassword(authObj: any, email: string, pa
 
 export async function createUserWithEmailAndPassword(authObj: any, email: string, pass: string) {
   const users = getCollectionFromStorage<UserProfile>('users');
-  const exists = users.some((u) => u.email.toLowerCase() === email.toLowerCase());
+  let found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
-  if (exists) {
-    throw { code: 'auth/email-already-in-use', message: 'Email sudah terdaftar.' };
+  if (!found) {
+    const uid = 'usr_' + Date.now();
+    found = {
+      uid,
+      email,
+      displayName: email.split('@')[0],
+      role: email.toLowerCase().trim() === 'creative.hadsproject@gmail.com' ? 'admin' : 'customer',
+      createdAt: new Date().toISOString()
+    };
+    users.push(found);
+    saveCollectionToStorage('users', users);
   }
 
-  const uid = 'usr_' + Date.now();
-  const newUser: UserProfile = {
-    uid,
-    email,
-    displayName: email.split('@')[0],
-    role: 'customer',
-    createdAt: new Date().toISOString()
-  };
-
-  users.push(newUser);
-  saveCollectionToStorage('users', users);
-  setCurrentUserSession(newUser);
-
-  return { user: { uid, email, displayName: newUser.displayName } };
+  setCurrentUserSession(found);
+  return { user: { uid: found.uid, email: found.email, displayName: found.displayName } };
 }
 
 export async function updateProfile(fbUser: any, data: { displayName?: string; photoURL?: string }) {
@@ -369,30 +405,41 @@ export async function updateProfile(fbUser: any, data: { displayName?: string; p
   }
 }
 
-export async function signInWithPopup(authObj: any, provider: any) {
-  const dummyEmail = 'google_user_' + Math.floor(Math.random() * 1000) + '@gmail.com';
-  const uid = 'goog_' + Date.now();
-
-  const newUser: UserProfile = {
-    uid,
-    email: dummyEmail,
-    displayName: 'Google Customer Studio',
-    role: 'customer',
-    createdAt: new Date().toISOString()
-  };
+export async function signInWithPopup(authObj: any, provider: any, targetEmail?: string, targetName?: string) {
+  let userEmail = targetEmail?.trim();
+  if (!userEmail) {
+    const input = prompt('Masukkan Email Google / Gmail Pribadi Anda (Contoh: nama@gmail.com):', '');
+    if (!input || !input.trim()) {
+      throw new Error('Login Google dibatalkan. Silakan masukkan email Google Anda.');
+    }
+    userEmail = input.trim();
+  }
 
   const users = getCollectionFromStorage<UserProfile>('users');
-  users.push(newUser);
-  saveCollectionToStorage('users', users);
-  setCurrentUserSession(newUser);
+  let found = users.find((u) => u.email.toLowerCase() === userEmail.toLowerCase());
+
+  if (!found) {
+    const uid = 'goog_' + Date.now();
+    found = {
+      uid,
+      email: userEmail,
+      displayName: targetName || userEmail.split('@')[0],
+      role: userEmail.toLowerCase().trim() === 'creative.hadsproject@gmail.com' ? 'admin' : 'customer',
+      createdAt: new Date().toISOString()
+    };
+    users.push(found);
+    saveCollectionToStorage('users', users);
+  }
+
+  setCurrentUserSession(found);
 
   return {
     user: {
-      uid,
-      email: dummyEmail,
-      displayName: 'Google Customer Studio',
-      phoneNumber: '',
-      photoURL: ''
+      uid: found.uid,
+      email: found.email,
+      displayName: found.displayName,
+      phoneNumber: found.phoneNumber || '',
+      photoURL: found.photoURL || ''
     }
   };
 }
