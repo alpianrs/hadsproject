@@ -4,6 +4,7 @@ import { Booking, BookingStatus, PackageItem, PortfolioItem, Review, StudioSetti
 import { db, collection, onSnapshot, updateDoc, doc, addDoc, deleteDoc, setDoc } from '../lib/firebase';
 import { generateInvoicePDF } from '../lib/generateInvoice';
 import { GOOGLE_APPS_SCRIPT_CODE, sendToGoogleSheets, testGoogleSheetsConnection, syncAllDataToGoogleSheets } from '../lib/googleSheets';
+import { pullLatestDataFromGoogleSheets } from '../lib/db';
 
 interface AdminDashboardProps {
   currentUser: UserProfile;
@@ -560,13 +561,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Delete Booking Handler
+  const handleDeleteBooking = async (id: string) => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus data booking ini secara permanen dari database?')) {
+      try {
+        await deleteDoc(doc(db, 'bookings', id));
+        alert('Data booking berhasil dihapus.');
+      } catch (err) {
+        console.error('Delete booking error:', err);
+        alert('Gagal menghapus booking.');
+      }
+    }
+  };
+
+  // Delete Package Handler
+  const handleDeletePackage = async (id: string) => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus paket ini dari database?')) {
+      try {
+        await deleteDoc(doc(db, 'packages', id));
+        alert('Paket berhasil dihapus.');
+      } catch (err) {
+        console.error('Delete package error:', err);
+        alert('Gagal menghapus paket.');
+      }
+    }
+  };
+
+  // Delete Portfolio Handler
+  const handleDeletePortfolio = async (id: string) => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus portofolio ini dari galeri database?')) {
+      try {
+        await deleteDoc(doc(db, 'portfolio', id));
+        alert('Portofolio berhasil dihapus.');
+      } catch (err) {
+        console.error('Delete portfolio error:', err);
+        alert('Gagal menghapus portofolio.');
+      }
+    }
+  };
+
+  // Delete Cancelled Bookings
+  const handleDeleteCancelledBookings = async () => {
+    const cancelled = bookings.filter(b => b.status === 'Dibatalkan');
+    if (cancelled.length === 0) {
+      alert('Tidak ada booking bertanda Dibatalkan.');
+      return;
+    }
+    if (window.confirm(`Hapus ${cancelled.length} booking bertanda Dibatalkan dari database?`)) {
+      for (const b of cancelled) {
+        await deleteDoc(doc(db, 'bookings', b.id));
+      }
+      alert(`${cancelled.length} booking dibatalkan berhasil dihapus.`);
+    }
+  };
+
+  // Clear All Bookings Reset
+  const handleClearAllBookings = async () => {
+    if (bookings.length === 0) {
+      alert('Database booking sudah kosong.');
+      return;
+    }
+    if (window.confirm('PERINGATAN KRUSIAL: Hapus SELURUH data booking pelanggan?')) {
+      if (window.confirm('Konfirmasi sekali lagi: Yakin hapus semua record booking?')) {
+        for (const b of bookings) {
+          await deleteDoc(doc(db, 'bookings', b.id));
+        }
+        alert('Seluruh database booking berhasil dikosongkan.');
+      }
+    }
+  };
+
+  // Pull Data from Google Sheets
+  const [isPullingData, setIsPullingData] = useState(false);
+  const handlePullFromSheets = async () => {
+    setIsPullingData(true);
+    const success = await pullLatestDataFromGoogleSheets();
+    setIsPullingData(false);
+    if (success) {
+      alert('✅ Berhasil menarik & menyinkronkan data terbaru dari Google Sheets!');
+    } else {
+      alert('⚠️ Belum ada data baru atau URL Google Apps Script Web App belum dikonfigurasi di Pengaturan.');
+    }
+  };
+
   const currentChatThread = chatThreads.find((t) => t.customerId === selectedChatCustomerId);
 
   return (
     <div className="min-h-screen bg-black text-neutral-100 py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       
       {/* Admin Header */}
-      <div className="flex items-center justify-between pb-6 border-b border-amber-500/30 mb-8">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-amber-500/30 mb-8">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-full bg-amber-400 text-neutral-950 flex items-center justify-center font-bold">
             <Shield className="w-6 h-6" />
@@ -576,9 +660,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h1 className="text-2xl font-bold font-serif text-amber-200">Management System HadsProject</h1>
           </div>
         </div>
-        <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-400/40 rounded-full text-xs font-bold">
-          ADMIN AUTHORIZED
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePullFromSheets}
+            disabled={isPullingData}
+            className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+            title="Tarik & Sinkronkan Data Terbaru dari Google Sheets"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isPullingData ? 'animate-spin' : ''}`} />
+            <span>{isPullingData ? 'Menyinkronkan...' : 'Tarik Data Sheets'}</span>
+          </button>
+          <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-400/40 rounded-full text-xs font-bold">
+            ADMIN AUTHORIZED
+          </span>
+        </div>
       </div>
 
       {/* Admin Navigation Tabs */}
@@ -972,6 +1067,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <Download className="w-3.5 h-3.5" />
                               </button>
+
+                              <button
+                                onClick={() => handleDeleteBooking(b.id)}
+                                className="p-1.5 rounded bg-red-950/80 hover:bg-red-800 text-red-300 border border-red-500/40 transition-colors"
+                                title="Hapus Booking Permanen"
+                              >
+                                <Trash className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                         </td>
@@ -1175,12 +1278,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div key={pkg.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-3">
                   <div className="flex justify-between items-start">
                     <h4 className="font-bold text-amber-300 text-base">{pkg.name}</h4>
-                    <button
-                      onClick={() => setEditingPackage(pkg)}
-                      className="p-1.5 rounded-lg bg-neutral-950 text-amber-400 hover:text-white"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingPackage(pkg)}
+                        className="p-1.5 rounded-lg bg-neutral-950 text-amber-400 hover:text-white"
+                        title="Edit Paket"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeletePackage(pkg.id)}
+                        className="p-1.5 rounded-lg bg-red-950/80 text-red-300 hover:bg-red-800 border border-red-500/30"
+                        title="Hapus Paket"
+                      >
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs font-bold text-neutral-200">Rp {pkg.price.toLocaleString('id-ID')}</p>
                   <div className="flex items-center justify-between text-[10px] text-gray-300">
@@ -1339,8 +1452,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {portfolio.map((item) => (
                 <div key={item.id} className="relative rounded-sm overflow-hidden bg-neutral-900 border border-white/10 aspect-[4/5] group">
                   <img src={item.mediaUrl} alt={item.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-between">
-                    <span className="text-[10px] font-bold text-[#D4AF37] uppercase">{item.category}</span>
+                  <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] font-bold text-[#D4AF37] uppercase">{item.category}</span>
+                      <button
+                        onClick={() => handleDeletePortfolio(item.id)}
+                        className="p-1 rounded bg-red-600 text-white hover:bg-red-500 shadow"
+                        title="Hapus Portofolio"
+                      >
+                        <Trash className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <p className="text-xs font-bold text-white leading-tight">{item.title}</p>
                   </div>
                 </div>
@@ -1717,6 +1839,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className="w-full px-3 py-2 bg-neutral-950 border border-amber-500/40 rounded-sm text-amber-300 font-mono font-bold text-xs focus:outline-none focus:border-amber-400"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* DATABASE MANAGEMENT & DELETE BOX */}
+              <div className="p-4 bg-red-950/30 border border-red-500/40 rounded-xl space-y-3">
+                <div className="flex items-center space-x-2 text-red-300 font-bold text-xs">
+                  <Trash className="w-4 h-4 text-red-400" />
+                  <span>Manajemen & Hapus Database Studio</span>
+                </div>
+                <p className="text-[11px] text-neutral-300">
+                  Fitur ini memungkinkan Admin untuk membersihkan atau menghapus data berlebih dari database lokal & Google Sheets.
+                </p>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDeleteCancelledBookings}
+                    className="px-3 py-2 bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-500/40 rounded text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <Trash className="w-3.5 h-3.5" />
+                    <span>Hapus Booking Dibatalkan</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClearAllBookings}
+                    className="px-3 py-2 bg-red-950 hover:bg-red-900 text-red-300 border border-red-600 rounded text-xs font-bold flex items-center gap-1.5 transition-all"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                    <span>Reset / Hapus Semua Booking</span>
+                  </button>
                 </div>
               </div>
 

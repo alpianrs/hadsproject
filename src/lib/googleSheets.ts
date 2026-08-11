@@ -25,13 +25,17 @@ export const GOOGLE_APPS_SCRIPT_CODE = `/**
 
 function doPost(e) {
   try {
-    var contents = e.postData.contents;
-    var payload = JSON.parse(contents);
+    var contents = e.postData ? e.postData.contents : '';
+    var payload = contents ? JSON.parse(contents) : {};
     var action = payload.action;
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
     if (action === 'ping') {
       return responseJSON({ status: 'success', message: 'Koneksi Google Sheets HadsProject Berhasil!' });
+    }
+
+    if (action === 'get_all_data') {
+      return readAllDataFromSheets(ss);
     }
 
     if (action === 'sync_booking') {
@@ -73,11 +77,114 @@ function doPost(e) {
 }
 
 function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (e && e.parameter && e.parameter.action === 'get_all_data') {
+      return readAllDataFromSheets(ss);
+    }
+  } catch (err) {}
+
   return responseJSON({
     status: 'online',
     app: 'HadsProject Studio Database API',
     time: new Date().toISOString()
   });
+}
+
+function readAllDataFromSheets(ss) {
+  var result = { status: 'success', bookings: [], packages: [], blockedSlots: [], reviews: [] };
+  
+  try {
+    var bSheet = ss.getSheetByName('Bookings');
+    if (bSheet && bSheet.getLastRow() > 1) {
+      var bVals = bSheet.getRange(2, 1, bSheet.getLastRow() - 1, 19).getValues();
+      bVals.forEach(function(row) {
+        if (row[0] || row[18]) {
+          result.bookings.push({
+            invoiceNumber: String(row[0] || ''),
+            date: String(row[1] || ''),
+            timeSlot: String(row[2] || ''),
+            eventType: String(row[3] || ''),
+            customerName: String(row[4] || ''),
+            customerPhone: String(row[5] || ''),
+            customerEmail: String(row[6] || ''),
+            packageName: String(row[7] || ''),
+            location: String(row[8] || ''),
+            totalPrice: Number(row[9] || 0),
+            dpAmount: Number(row[10] || 0),
+            remainingAmount: Number(row[11] || 0),
+            status: String(row[12] || 'Menunggu DP'),
+            paymentProof: row[13] ? { proofUrl: String(row[13]), uploadedAt: String(row[17]) } : undefined,
+            fullPaymentProof: row[14] ? { proofUrl: String(row[14]), uploadedAt: String(row[17]) } : undefined,
+            googleDriveResultUrl: String(row[15] || ''),
+            notes: String(row[16] || ''),
+            createdAt: String(row[17] || new Date().toISOString()),
+            id: String(row[18] || row[0] || ('b_' + Math.random()))
+          });
+        }
+      });
+    }
+
+    var pSheet = ss.getSheetByName('Packages');
+    if (pSheet && pSheet.getLastRow() > 1) {
+      var pVals = pSheet.getRange(2, 1, pSheet.getLastRow() - 1, 13).getValues();
+      pVals.forEach(function(row) {
+        if (row[1]) {
+          result.packages.push({
+            id: String(row[0] || ('pkg_' + Math.random())),
+            name: String(row[1] || ''),
+            category: String(row[2] || 'Wedding'),
+            price: Number(row[3] || 0),
+            minDp: Number(row[4] || 0),
+            duration: String(row[5] || ''),
+            durationHours: Number(row[6] || 4),
+            photoCount: String(row[7] || ''),
+            videoCount: String(row[8] || ''),
+            drone: String(row[9]) === 'Ya',
+            album: String(row[10] || ''),
+            cetak: String(row[11] || ''),
+            active: String(row[12]) !== 'Nonaktif'
+          });
+        }
+      });
+    }
+
+    var bsSheet = ss.getSheetByName('BlockedSlots');
+    if (bsSheet && bsSheet.getLastRow() > 1) {
+      var bsVals = bsSheet.getRange(2, 1, bsSheet.getLastRow() - 1, 5).getValues();
+      bsVals.forEach(function(row) {
+        if (row[1]) {
+          result.blockedSlots.push({
+            id: String(row[0] || ('bs_' + Math.random())),
+            date: String(row[1] || ''),
+            timeSlot: String(row[2] || 'ALL'),
+            reason: String(row[3] || ''),
+            isFullDay: String(row[4]) === 'Ya'
+          });
+        }
+      });
+    }
+
+    var rSheet = ss.getSheetByName('Reviews');
+    if (rSheet && rSheet.getLastRow() > 1) {
+      var rVals = rSheet.getRange(2, 1, rSheet.getLastRow() - 1, 7).getValues();
+      rVals.forEach(function(row) {
+        if (row[1]) {
+          result.reviews.push({
+            id: String(row[0] || ('rev_' + Math.random())),
+            customerName: String(row[1] || ''),
+            rating: Number(row[2] || 5),
+            eventType: String(row[3] || ''),
+            comment: String(row[4] || ''),
+            approved: String(row[5]) === 'Disetujui',
+            createdAt: String(row[6] || '')
+          });
+        }
+      });
+    }
+  } catch(err) {}
+
+  return responseJSON(result);
 }
 
 function responseJSON(data) {
@@ -361,3 +468,25 @@ export async function syncAllDataToGoogleSheets(
 
   return sendToGoogleSheets(webAppUrl, 'sync_all_data', payload);
 }
+
+/**
+ * Pull All Data from Google Sheets Database Web App
+ */
+export async function pullAllDataFromGoogleSheets(webAppUrl: string): Promise<any> {
+  if (!webAppUrl || !webAppUrl.trim().startsWith('http')) return null;
+
+  try {
+    const url = `${webAppUrl.trim()}?action=get_all_data`;
+    const response = await fetch(url, { method: 'GET' });
+    if (response.ok) {
+      const json = await response.json();
+      if (json && json.status === 'success') {
+        return json;
+      }
+    }
+  } catch (err) {
+    console.warn('Pull from Google Sheets warning:', err);
+  }
+  return null;
+}
+

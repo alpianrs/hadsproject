@@ -1,5 +1,5 @@
 import { INITIAL_PACKAGES, INITIAL_PORTFOLIO, INITIAL_REVIEWS, DEFAULT_STUDIO_SETTINGS } from './seedData';
-import { sendToGoogleSheets } from './googleSheets';
+import { sendToGoogleSheets, pullAllDataFromGoogleSheets } from './googleSheets';
 import { UserProfile, StudioSettings, Booking, PackageItem, PortfolioItem, Review, BlockedSlot, AppNotification, ChatMessage } from '../types';
 
 // Custom Event Emitter for Real-Time Collection Listeners
@@ -19,6 +19,16 @@ export function getCollectionFromStorage<T = any>(collectionName: string): T[] {
   }
 }
 
+// Helper to save collection items to localStorage without triggering back-sync loop
+export function saveCollectionToStorageWithoutSync<T = any>(collectionName: string, items: T[]) {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + collectionName, JSON.stringify(items));
+    dbEmitter.dispatchEvent(new CustomEvent('change:' + collectionName, { detail: items }));
+  } catch (err) {
+    console.error(`Error saving collection ${collectionName}:`, err);
+  }
+}
+
 // Helper to save collection items to localStorage and notify listeners
 export function saveCollectionToStorage<T = any>(collectionName: string, items: T[]) {
   try {
@@ -30,6 +40,40 @@ export function saveCollectionToStorage<T = any>(collectionName: string, items: 
   } catch (err) {
     console.error(`Error saving collection ${collectionName}:`, err);
   }
+}
+
+// Pull latest data from Google Sheets across devices
+export async function pullLatestDataFromGoogleSheets(): Promise<boolean> {
+  const settingsList = getCollectionFromStorage<StudioSettings>('settings');
+  const settings = settingsList[0] || DEFAULT_STUDIO_SETTINGS;
+  const webAppUrl = settings.googleSheetsAppScriptUrl;
+
+  if (!webAppUrl || !webAppUrl.trim()) return false;
+
+  const data = await pullAllDataFromGoogleSheets(webAppUrl);
+  if (data && data.status === 'success') {
+    if (Array.isArray(data.bookings) && data.bookings.length > 0) {
+      saveCollectionToStorageWithoutSync('bookings', data.bookings);
+    }
+    if (Array.isArray(data.packages) && data.packages.length > 0) {
+      saveCollectionToStorageWithoutSync('packages', data.packages);
+    }
+    if (Array.isArray(data.blockedSlots) && data.blockedSlots.length > 0) {
+      saveCollectionToStorageWithoutSync('blockedSlots', data.blockedSlots);
+    }
+    if (Array.isArray(data.reviews) && data.reviews.length > 0) {
+      saveCollectionToStorageWithoutSync('reviews', data.reviews);
+    }
+    return true;
+  }
+  return false;
+}
+
+// Periodic background polling for multi-device sync
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    pullLatestDataFromGoogleSheets().catch(() => {});
+  }, 12000);
 }
 
 // Auto sync helper to Google Sheets
