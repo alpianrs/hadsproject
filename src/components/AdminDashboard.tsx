@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, TrendingUp, Calendar, DollarSign, Clock, CheckCircle2, XCircle, AlertTriangle, MessageSquare, Plus, Edit, Trash, Download, Filter, Search, Eye, Settings, Image as ImageIcon, Send, RefreshCw, X, Layers, ExternalLink, Folder, FileSpreadsheet, Copy, Check, Database, Sparkles, Code, FileText } from 'lucide-react';
-import { Booking, PackageItem, PortfolioItem, Review, StudioSettings, BlockedSlot, ChatMessage, UserProfile } from '../types';
+import { Booking, BookingStatus, PackageItem, PortfolioItem, Review, StudioSettings, BlockedSlot, ChatMessage, UserProfile } from '../types';
 import { db, collection, onSnapshot, updateDoc, doc, addDoc, deleteDoc, setDoc } from '../lib/firebase';
 import { generateInvoicePDF } from '../lib/generateInvoice';
 import { GOOGLE_APPS_SCRIPT_CODE, sendToGoogleSheets, testGoogleSheetsConnection, syncAllDataToGoogleSheets } from '../lib/googleSheets';

@@ -3,6 +3,7 @@ import { Calendar as CalendarIcon, CreditCard, MessageSquare, Bell, Star, FileTe
 import { Booking, UserProfile, StudioSettings, ChatMessage, AppNotification, Review } from '../types';
 import { db, collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDocs } from '../lib/firebase';
 import { generateInvoicePDF } from '../lib/generateInvoice';
+import { sendToGoogleSheets } from '../lib/googleSheets';
 
 interface CustomerDashboardProps {
   currentUser: UserProfile;
